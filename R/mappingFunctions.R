@@ -3,6 +3,7 @@
 # maps.
 
 #' @import tidyverse sf janitor
+#' @importFrom magrittr %>%
 NULL
 
 #' Creates a CRS string based on a polygon that corrects the projection of the
@@ -76,7 +77,7 @@ subwayRoutes <- function(startStopDF,subwaySFDF) {
       values_from = name,
       names_from = phase
     ) %>%
-    dplyr::gather(position,station,start:end) %>%
+    tidyr::gather(position,station,start:end) %>%
     dplyr::left_join(
       mergeRange,
       by = 'station'
