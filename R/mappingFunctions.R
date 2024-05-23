@@ -2,7 +2,7 @@
 # diminish the amount of time I need to spend on mapping projects, like monthly
 # maps.
 
-#' @import tidyverse sf
+#' @import tidyverse sf janitor
 NULL
 
 #' Creates a CRS string based on a polygon that corrects the projection of the
@@ -32,5 +32,125 @@ correctProjection <- function(sfDF) {
   )
 
   return(returnString)
+
+}
+
+#' Uses 2 input data frames to create specific subway and train travel lines
+#' that I have traversed in a given timeframe. One data frame contains dates and
+#' stops, another contains subway route data, broken up by traversals between
+#' two stops
+#'
+#' This function intakes two data frames and builds out a geographic dataframe
+#' containing all of the routes that were developed between two routes.
+#'
+#' @param startStopDF a dataframe containing the starting trainstop and ending
+#'   trainstop for a given train ride
+#' @param subwaySFDF a geographic dataframe containing all of the subway lines
+#'   in a given geographic area, where the sf data is broken down based on legs
+#'   between stops
+#' @return A dataframe containing all of the train routes between two stops
+#' @export
+
+subwayRoutes <- function(startStopDF,subwaySFDF) {
+
+  # Create rows to merge
+  mergeRange <- subwaySFDF %>%
+    as.data.frame() %>%
+    dplyr::select(id,line,station_1,station_2,spur) %>%
+    tidyr::gather(station_num,station,station_1:station_2)
+
+  # Train data set
+
+  trainRows <- startStopDF %>%
+    as.data.frame() %>%
+    janitor::clean_names(case = 'lower_camel') %>%
+    dplyr::mutate(
+      date = as.Date(description, format = '%m/%d/%Y'),
+      transitID = ceiling(row_number()/2)+2000,
+      phase = ifelse(
+        row_number()%%2==0,'end','start'
+      )
+    ) %>%
+    dplyr::select(transitID,name,date,phase) %>%
+    tidyr::pivot_wider(
+      values_from = name,
+      names_from = phase
+    ) %>%
+    dplyr::gather(position,station,start:end) %>%
+    dplyr::left_join(
+      mergeRange,
+      by = 'station'
+    ) %>%
+    dplyr::group_by(transitID,line,position) %>%
+    dplyr::mutate(rowPortion = 1/n()) %>%
+    dplyr::group_by(transitID, line) %>%
+    dplyr::mutate(maxRow = sum(rowPortion)) %>%
+    dplyr::group_by(transitID) %>%
+    dplyr::filter(maxRow == max(maxRow)) %>%
+    as.data.frame()
+
+  trains <- data.frame()
+
+  for(tid in unique(trainRows$transitID)) {
+
+    miniSet <- trainRows %>%
+      dplyr::filter(transitID == tid)
+
+    rteLine <- unique(miniSet$line)
+    description <- unique(miniSet$Description)
+    name <- unique(miniSet$Name)
+    date <- unique(miniSet$date)
+
+    spurS <- unique(miniSet$spur[miniSet$position == 'start'])
+    spurE <- unique(miniSet$spur[miniSet$position == 'end'])
+
+    spurVal <- unique(c(spurS,spurE))
+    if(is_empty(spurVal)) {
+      spurVal <- NA
+    }
+
+    set1 <- miniSet$id[miniSet$position == 'start']
+    set2 <- miniSet$id[miniSet$position == 'end']
+
+    # all combinations
+    allCombos <- expand.grid(set1,set2) %>%
+      dplyr::mutate(difference = abs(Var1-Var2))
+
+    keeper <- allCombos %>%
+      dplyr::filter(difference == min(difference))
+
+    rteValues = c(keeper$Var1,keeper$Var2)
+
+    rteSegment <- subwaySFDF %>%
+
+      dplyr::filter(
+        line == rteLine,
+        id >= min(rteValues),
+        id <= max(rteValues),
+        spur %in% spurVal | is.na(spur)
+      ) %>%
+
+      dplyr::mutate(transitID = tid) %>%
+
+      dplyr::arrange(id) %>%
+
+      dplyr::group_by(transitID) %>%
+
+      dplyr::summarise() %>%
+
+      dplyr::mutate(
+        Description = description,
+        Name = name,
+        line = rteLine,
+        date = date
+      )
+
+    # Add the geometry to the list
+    trains <- trains %>% rbind(rteSegment)
+  }
+
+  finalDF <- trains %>% dplyr::select(line, date, geometry)
+
+  return(finalDF)
 
 }
