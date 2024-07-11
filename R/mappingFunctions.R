@@ -2,8 +2,12 @@
 # diminish the amount of time I need to spend on mapping projects, like monthly
 # maps.
 
-#' @import tidyverse sf janitor
+#' @importFrom dplyr arrange filter group_by left_join mutate select summarise
+#' @importFrom janitor clean_names
 #' @importFrom magrittr %>%
+#' @importFrom sf st_bbox st_intersection
+#' @importFrom tidyr gather pivot_wider
+#' @importFrom tmaptools bb_poly
 NULL
 
 #' Creates a CRS string based on a polygon that corrects the projection of the
@@ -20,7 +24,7 @@ correctProjection <- function(sfDF) {
 
   coordinates <- sfDF %>%
 
-    st_bbox() %>%
+    sf::st_bbox() %>%
     {
       c(x = mean(.$xmin, .$xmax),
         y = mean(.$ymin, .$ymax))
@@ -33,6 +37,38 @@ correctProjection <- function(sfDF) {
   )
 
   return(returnString)
+
+}
+
+#' This function will take a polygon and cut it off at a specific set of
+#' coordinates. To accomplish this, it uses a dataframe containing columns
+#' titled value (which contains coordinates like xmin, xmax, ymin, and ymax),
+#' and a second column containing the value to cut at.
+#'
+#' This function cuts a polygon in the specific lat/long value. It does this
+#' using a data frame containing information on where to cut. NOTE: Only works
+#' in lat/long coordinate systems
+#'
+#' @param polygon a polygon to clip
+#' @param overrideDF a dataframe containing information on where to clip
+#' @return the polygon, clipped at the coordinates
+#' @export
+
+polygonClipper <- function(polygon,overrideDF) {
+
+  bboxCutter <- sf::st_bbox(polygon)
+
+  for(coord in names(bboxCutter)) {
+    if(coord %in% overrideDF$value) {
+      bboxCutter[coord] <- overrideDF$coordinate[overrideDF$value==coord]
+    }
+  }
+
+  cutter <- tmaptools::bb_poly(bboxCutter)
+
+  polygon <- polygon %>% sf::st_intersection(cutter)
+
+  return(polygon)
 
 }
 
