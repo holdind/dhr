@@ -22,21 +22,18 @@ NULL
 
 correctProjection <- function(sfDF) {
 
-  coordinates <- sfDF %>%
-
-    sf::st_bbox() %>%
-    {
-      c(x = mean(.$xmin, .$xmax),
-        y = mean(.$ymin, .$ymax))
-    }
-
-  returnString <- sprintf(
-    "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=%s +lon_0=%s +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs",
-    coordinates[2],
-    coordinates[1]
-  )
-
-  return(returnString)
+  # Get the bounding box to determine the center
+  bbox <- st_bbox(sfDF)
+  
+  # Calculate the center of the bounding box
+  centerLon <- (bbox["xmin"] + bbox["xmax"]) / 2
+  centerLat <- (bbox["ymin"] + bbox["ymax"]) / 2
+  
+  # Define the Albers Equal Area projection in meters using sprintf
+  albersProj <- sprintf("+proj=aea +lon_0=%.6f +lat_1=%.6f +lat_2=%.6f +x_0=0 +y_0=0 +datum=WGS84 +units=m", 
+                        centerLon, centerLat, centerLat)
+  
+  return(albersProj)
 
 }
 
