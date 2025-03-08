@@ -5,7 +5,7 @@
 #' @importFrom dplyr arrange filter group_by left_join mutate select summarise
 #' @importFrom janitor clean_names
 #' @importFrom magrittr %>%
-#' @importFrom sf st_bbox st_intersection
+#' @importFrom sf st_buffer st_bbox st_intersection st_transform
 #' @importFrom tidyr gather pivot_wider
 #' @importFrom tmaptools bb_poly
 NULL
@@ -67,6 +67,70 @@ polygonClipper <- function(polygon,overrideDF) {
 
   return(polygon)
 
+}
+
+#' This function takes an input geometry, draws a bounding box geometry around
+#' it, and then then intersects a second geometry with it, doing everything
+#' necessary including correcting the crs and buffering polygons
+#'
+#' This polygon will use one polygon to clip another.
+#'
+#' @param inputPolygon An overlay polygon that clips the input polygon
+#' @param cutPolygon The polygon to be intersected with the inputPolygon
+#' @param crsMatch A Coordinate System that matches both polygons for the cut
+#' @param edgeBuffer This value expands or contracts the outer, cutting polygon.
+#'   Note it will be in whatever metric your crs is in, whether feet, degrees,
+#'   or meters.
+#' @param borderBuffer This value expands or contracts the final polygon.
+#' @return the polygon, clipped by the cutting polygon
+#' @export
+
+routeCutterPolygon <- function(inputPolygon,cutPolygon,crsMatch,edgeBuffer,borderBuffer) {
+  
+  cutterBox <- st_bbox(inputPolygon)
+  
+  mapCutter <- tmaptools::bb_poly(cutterBox) %>% 
+    sf::st_transform(crs = crsMatch) %>% 
+    sf::st_buffer(edgeBuffer)
+  
+  returnPolygon <- cutPolygon %>% 
+    sf::st_transform(crs = crsMatch) %>%
+    sf::st_buffer(borderBuffer) %>% 
+    sf::st_intersection(mapCutter)
+  
+  return(returnPolygon)
+  
+}
+
+#' This function takes a point or line geographic object and then intersects it
+#' with a bbox draw around another geometry, doing everything necessary
+#' including correcting the crs.
+#'
+#' This polygon will use a polygon to clip point or line geometry
+#'
+#' @param inputPolygon An overlay polygon that clips the input polygon
+#' @param cutGeometry The polygon to be intersected with the inputPolygon
+#' @param crsMatch A Coordinate System that matches both polygons for the cut
+#' @param edgeBuffer This value expands or contracts the outer, cutting polygon.
+#'   Note it will be in whatever metric your crs is in, whether feet, degrees,
+#'   or meters.
+#' @return the polygon, clipped by the cutting polygon
+#' @export
+
+routeCutterLinePoint <-  function(inputPolygon,cutGeometry,crsMatch,edgeBuffer) {
+  
+  cutterBox <- st_bbox(inputPolygon)
+  
+  mapCutter <- tmaptools::bb_poly(cutterBox) %>% 
+    sf::st_transform(crs = crsMatch) %>% 
+    sf::st_buffer(edgeBuffer)
+  
+  returnPolygon <- cutGeometry %>% 
+    sf::st_transform(crs = crsMatch) %>%
+    sf::st_intersection(mapCutter)
+  
+  return(returnPolygon)
+  
 }
 
 #' Uses 2 input data frames to create specific subway and train travel lines
